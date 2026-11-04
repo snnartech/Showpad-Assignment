@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.8.25" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Lumen.Application\Lumen.Application.csproj" />
+    <ProjectReference Include="..\Lumen.Infrastructure\Lumen.Infrastructure.csproj" />
+    <ProjectReference Include="..\Lumen.Auth\Lumen.Auth.csproj" />
+    <ProjectReference Include="..\Lumen.ServiceDefaults\Lumen.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,77 @@
+# Local infrastructure for Lumen. No AWS account needed:
+#   SQS  -> LocalStack          SMTP -> Mailpit
+#   SQL Server, Redis, nginx proxy and the Aspire dashboard (OpenTelemetry) run as containers.
+# The .NET projects are NOT in here - start each one with `dotnet run` (see README).
+#
+# Host ports are deliberately unusual so they do not clash with other stacks on the machine.
+name: showpad-lumen
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64            # no arm64 image; runs under emulation on Apple Silicon
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Lumen_Passw0rd!"
+      MSSQL_PID: Developer
+    ports:
+      - "14330:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6390:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  localstack:                         # AWS SQS emulator (queue + dead-letter queue)
+    image: localstack/localstack:3
+    environment:
+      SERVICES: sqs
+      SQS_ENDPOINT_STRATEGY: path     # queue urls like http://localhost:4567/000000000000/quiz-attempts
+      LOCALSTACK_HOST: localhost:4567
+    ports:
+      - "4567:4566"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health | grep -q '\"sqs\": \"\\(available\\|running\\)\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mailpit:                            # SMTP sink for the quiz completion email
+    image: axllent/mailpit:v1.22
+    ports:
+      - "1026:1025"                   # SMTP
+      - "8026:8025"                   # web UI  -> http://localhost:8026
+
+  aspire-dashboard:                   # OpenTelemetry traces / metrics / logs
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.4
+    environment:
+      ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "18888:18888"                 # UI   -> http://localhost:18888
+      - "4327:18889"                  # OTLP gRPC (what the .NET services export to)
+      - "4328:18890"                  # OTLP HTTP
+
+  nginx:                              # proxy in front of the services (Appendix A1)
+    image: nginx:1.27-alpine
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./docker/nginx/lumen.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8088:80"                     # http://acme.lumen.localhost:8088/api/...
+
+volumes:
+  sqlserver-data:
